@@ -47,14 +47,28 @@ namespace WebProxy
         Socket ServerSideSocket;
 
 
-        byte[] RequestBuffer = new byte[8192];
-        byte[] ResponseBuffer = new byte[8192];
+        byte[] RequestBuffer = new byte[0x1000];
+        byte[] ResponseBuffer = new byte[0x400];
 
         public void CleartBuffer(byte[] SourceBuffer)
         {
             Array.Clear(SourceBuffer, 0, SourceBuffer.Length);
         }
 
+        public void TrySocket(Action DoAction)
+        {
+            try
+            {
+                DoAction();
+            }
+            catch
+            {
+                //if (ServerSideSocket != null) ServerSideSocket.Shutdown(SocketShutdown.Both);
+                if (ClientSocket != null) ClientSocket.Shutdown(SocketShutdown.Both);
+                ClientSocket = null;
+                ServerSideSocket = null;
+            }
+        }
 
         IPAddress ServerIP;
         Int32 ServerPort;
@@ -74,7 +88,7 @@ namespace WebProxy
                 IPEndPoint ServerIPPoint = new IPEndPoint(ServerIP.MapToIPv4(), ServerPort);
                 ServerSocket = new Socket(ServerIP.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                 ServerSocket.Bind(ServerIPPoint);
-                ServerSocket.Listen(0);
+                ServerSocket.Listen(50);
                 //Thread ListenThread = new Thread(new ParameterizedThreadStart(StartLinsten));
                 //ListenThread.Start(ServerSocket);
                 ServerSocket.BeginAccept(OnClientStart, null);
@@ -91,134 +105,144 @@ namespace WebProxy
         /// <param name="obj"></param>
         private void StartLinsten(object obj)
         {
-            
+
         }
 
 
         private void OnClientStart(IAsyncResult ar)
         {
-            //服务端接受到客户端连接
-            ClientSocket = ServerSocket.EndAccept(ar);
+            TrySocket(() =>
+            {
+                //服务端接受到客户端连接
+                ClientSocket = ServerSocket.EndAccept(ar);
 
-            //取出客户端的请求
-            CleartBuffer(ResponseBuffer);
-            ClientSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnClientResponse, null);
+                //取出客户端的请求
+                CleartBuffer(ResponseBuffer);
+                ClientSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnClientResponse, null);
 
-            //继续开始监听
-            ServerSocket.BeginAccept(OnClientStart, null);
+                //继续开始监听
+                ServerSocket.BeginAccept(OnClientStart, null);
+            });
         }
 
         private void OnClientResponse(IAsyncResult ar)
         {
-            Int32 ReviceLength = ClientSocket.EndReceive(ar);
-            String ReviceText = Encoding.ASCII.GetString(ResponseBuffer);
-
-            //现内部远程外部WEB
-            RequestRawObject RRO = new RequestRawObject(ReviceText);
-            Int32 RemotePort = 80;
-            if (RRO.RequestCommand == "CONNECT")
+            TrySocket(() =>
             {
-                RemotePort = 443;
-            }
-            if (RRO.RequestCommand == "POST")
-            {
+                Int32 ReviceLength = ClientSocket.EndReceive(ar);
+                String ReviceText = Encoding.ASCII.GetString(ResponseBuffer);
+                Int32 ss = ReviceText.Length;
 
-            }
-            if (RRO.RequestURL==null)
-            {
-                return;
-            }
-            
-            ServerSideSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            if (!String.IsNullOrEmpty(RRO.Proxy_Connection) && RRO.Proxy_Connection.ToUpper().Equals("KEEP-ALIVE"))
-            {
-                ServerSideSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, 1);
-            }
-            ServerSideSocket.BeginConnect(new IPEndPoint(Dns.GetHostAddresses(RRO.RequestURL.Host)[0], RemotePort), OnServerAimSocketConnected, RRO);
+                //现内部远程外部WEB
+                RequestRawObject RRO = new RequestRawObject(ReviceText);
+                Int32 RemotePort = 80;
+                if (RRO.RequestCommand == "CONNECT")
+                {
+                    RemotePort = 443;
+                }
+                if (RRO.RequestCommand == "POST")
+                {
 
-            Console.WriteLine("请求连接:" + RRO.RequestRawURL);
-            ClientSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnClientResponse, null);
+                }
+                if (RRO.RequestURL == null)
+                {
+                    return;
+                }
 
+                ServerSideSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                if (!String.IsNullOrEmpty(RRO.Proxy_Connection) && RRO.Proxy_Connection.ToUpper().Equals("KEEP-ALIVE"))
+                {
+                    ServerSideSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, 1);
+                }
 
+                ServerSideSocket.BeginConnect(new IPEndPoint(Dns.GetHostAddresses(RRO.RequestURL.Host)[0], RemotePort), OnServerAimSocketConnected, RRO);
 
-            //WebRequest.DefaultWebProxy = null;
-            //WebRequest AimWebRequest = (WebRequest)WebRequest.Create(RRO.RequestURL);
-            //AimWebRequest.BeginGetResponse(OnServerAimWebRequest, AimWebRequest);
+                Console.WriteLine("请求连接:" + RRO.RequestRawURL);
 
+                ClientSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnClientResponse, null);
+            });
 
         }
-
-        //private void OnServerAimWebRequest(IAsyncResult ar)
-        //{
-        //    WebRequest AimWebRequest = ar.AsyncState as WebRequest;
-        //    Stream GetResponseStream = AimWebRequest.EndGetResponse(ar).GetResponseStream();
-
-        //    Byte[] ContendStram = new Byte[4089];
-        //    Int32 ReadLength = GetResponseStream.Read(ContendStram, 0, ContendStram.Length);
-        //    String ReadConted = "";
-        //    while (ReadLength != 0)
-        //    {
-        //        ReadLength = GetResponseStream.Read(ContendStram, 0, ContendStram.Length);
-        //        ReadConted += Encoding.ASCII.GetString(ContendStram);
-        //    }
-        //    Byte[] SendConted = Encoding.ASCII.GetBytes(ReadConted);
-        //    ClientSocket.BeginSend(ContendStram, 0, ContendStram.Length, SocketFlags.None, OnClientReviced, ClientSocket);
-        //}
-
         //服务端再连接远程WEB
         private void OnServerAimSocketConnected(IAsyncResult ar)
         {
-            RequestRawObject RRO = ar.AsyncState as RequestRawObject;
-            ServerSideSocket.EndConnect(ar);
-            if (RRO.RequestCommand == "CONNECT")
+            TrySocket(() =>
             {
-                String CONNECTSTATE = RRO.RequestHttpVersion + " 200 Connection established\r\n\r\n";
-                ClientSocket.BeginSend(Encoding.ASCII.GetBytes(CONNECTSTATE), 0, CONNECTSTATE.Length, SocketFlags.None, (X) =>
+                
+
+                RequestRawObject RRO = ar.AsyncState as RequestRawObject;
+                ServerSideSocket.EndConnect(ar);
+                if (RRO.RequestCommand == "CONNECT")
                 {
-                    StartRelay();
-                }, null);
-            }
-            else
-            {
-                ServerSideSocket.BeginSend(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, (X) =>
+                    String CONNECTSTATE = RRO.RequestHttpVersion + " 200 Connection established\r\n\r\n";
+                    ClientSocket.BeginSend(Encoding.ASCII.GetBytes(CONNECTSTATE), 0, CONNECTSTATE.Length, SocketFlags.None, (X) =>
+                    {
+                        ClientSocket.EndSend(X);
+                        StartRelay();
+                    }, null);
+                }
+                else
                 {
-                    StartRelay();
-                }, null);
-            }
+                    ServerSideSocket.BeginSend(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, (X) =>
+                    {
+                        ServerSideSocket.EndSend(X);
+                        StartRelay();
+                    }, null);
+                }
+            });
 
         }
 
         private void StartRelay()
         {
-             ClientSocket.BeginReceive(RequestBuffer, 0, RequestBuffer.Length, SocketFlags.None, OnClientReceive, ClientSocket);
-            ServerSideSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnRemoteReceive, ServerSideSocket);
+            TrySocket(() =>
+            {
+                
+                CleartBuffer(RequestBuffer);
+                CleartBuffer(ResponseBuffer);
+                ClientSocket.BeginReceive(RequestBuffer, 0, RequestBuffer.Length, SocketFlags.None, OnClientReceive, ClientSocket);
+                ServerSideSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnRemoteReceive, ServerSideSocket);
+            });
         }
 
         private void OnRemoteReceive(IAsyncResult ar)
         {
-            Int32 IR = ServerSideSocket.EndReceive(ar);
-            ClientSocket.BeginSend(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnClientSent, ClientSocket);
+            TrySocket(() =>
+            {
+                Int32 IR = ServerSideSocket.EndReceive(ar);
+                ClientSocket.BeginSend(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnClientSent, ClientSocket);
+            });
         }
 
         private void OnClientSent(IAsyncResult ar)
         {
-            Int32 IR = ClientSocket.EndSend(ar);
-            ServerSideSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnRemoteReceive, ServerSideSocket);
+            TrySocket(() =>
+            {
+                Int32 IR = ClientSocket.EndSend(ar);
+                CleartBuffer(ResponseBuffer);
+                ServerSideSocket.BeginReceive(ResponseBuffer, 0, ResponseBuffer.Length, SocketFlags.None, OnRemoteReceive, ServerSideSocket);
+            });
         }
 
         private void OnClientReceive(IAsyncResult ar)
         {
-            Int32 IR = ClientSocket.EndReceive(ar);
-            ServerSideSocket.BeginSend(RequestBuffer, 0, RequestBuffer.Length, SocketFlags.None, OnRemoteSent, ServerSideSocket);
+            TrySocket(() =>
+            {
+                Int32 IR = ClientSocket.EndReceive(ar);
+                ServerSideSocket.BeginSend(RequestBuffer, 0, IR, SocketFlags.None, OnRemoteSent, ServerSideSocket);
+            });
         }
 
         private void OnRemoteSent(IAsyncResult ar)
         {
-            Int32 IR= ServerSideSocket.EndSend(ar);
-            ClientSocket.BeginReceive(RequestBuffer, 0, RequestBuffer.Length, SocketFlags.None, OnClientReceive, ClientSocket);
+            TrySocket(() =>
+            {
+                Console.WriteLine(RequestBuffer);
+                Int32 IR = ServerSideSocket.EndSend(ar);
+                CleartBuffer(RequestBuffer);
+                ClientSocket.BeginReceive(RequestBuffer, 0, IR, SocketFlags.None, OnClientReceive, ClientSocket);
+            });
         }
-
-
 
         public void Stop()
         {
