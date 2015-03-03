@@ -15,7 +15,8 @@ namespace WebProxy
 {
     public partial class MainFrm : Form
     {
-        ProxyServer PS = new ProxyServer(IPAddress.Parse("192.168.8.111"),8080);
+        //ProxyServer PS = new ProxyServer(IPAddress.Parse("192.168.8.111"),8080);
+        ProxyServer PS = new ProxyServer(IPAddress.Parse("192.168.1.3"), 8080);        
         Boolean CururentServerState = false;
         public MainFrm()
         {
@@ -23,7 +24,7 @@ namespace WebProxy
             
             PS.ServerStateChanged = ServerStateChanged;
             PS.Start();
-
+           
          
         }
 
