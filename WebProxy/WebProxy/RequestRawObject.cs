@@ -1,11 +1,40 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace WebProxy
 {
+
+    public class ProxyRevicedInfo
+    {
+        Byte[] _Buffer;
+        public Byte[] Buffer
+        {
+            get
+            {
+                if (_Buffer == null)
+                {
+                    _Buffer = new Byte[1024];
+                }
+                return _Buffer;
+            }
+        }
+
+        public String ResponseText { get; set; }
+        public Int32 RevicedLength { get; set; }
+
+        public Socket RefenceSocket { get; set; }
+
+        public ProxyRevicedInfo(String _ResponseText, Int32 _ReviceLength, Socket _RefenceSocket)
+        {
+            this.ResponseText = _ResponseText;
+            this.RevicedLength = _ReviceLength;
+            this.RefenceSocket = _RefenceSocket;
+        }
+    }
     public class RequestRawObject
     {
         public string RequestCommand { get; set; }
@@ -22,6 +51,10 @@ namespace WebProxy
 
         public string DNT { get; set; }
         public string Proxy_Connection { get; set; }
+
+        public Object Tag1 { get; set; }
+        public Object Tag2 { get; set; }
+
 
         public RequestRawObject(String RequestString)
         {

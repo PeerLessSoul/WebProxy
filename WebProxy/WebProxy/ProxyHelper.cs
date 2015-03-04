@@ -12,20 +12,7 @@ using System.Threading.Tasks;
 namespace WebProxy
 {
 
-    public class ProxySelfInfo
-    {
-        public String ResponseText { get; set; }
-        public Int32 RevicedLength { get; set; }
 
-        public Socket RefenceSocket { get; set; }
-
-        public ProxySelfInfo(String _ResponseText, Int32 _ReviceLength, Socket _RefenceSocket)
-        {
-            this.ResponseText = _ResponseText;
-            this.RevicedLength = _ReviceLength;
-            this.RefenceSocket = _RefenceSocket;
-        }
-    }
 
 
 
