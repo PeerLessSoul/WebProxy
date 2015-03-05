@@ -23,10 +23,13 @@ namespace WebProxy
             }
         }
 
+        
+
         public String ResponseText { get; set; }
         public Int32 RevicedLength { get; set; }
 
         public Socket RefenceSocket { get; set; }
+        public Socket RefenceClientSokcet { get; set; }
 
         public ProxyRevicedInfo(String _ResponseText, Int32 _ReviceLength, Socket _RefenceSocket)
         {
@@ -52,8 +55,8 @@ namespace WebProxy
         public string DNT { get; set; }
         public string Proxy_Connection { get; set; }
 
-        public Object Tag1 { get; set; }
-        public Object Tag2 { get; set; }
+        public Byte[] RefenceBuffer { get; set; }
+        public Socket RefenceSocket { get; set; }
 
 
         public RequestRawObject(String RequestString)
@@ -149,5 +152,7 @@ namespace WebProxy
             return ReturnString;
         }
 
+
+        public Socket RefenceClientSocket { get; set; }
     }
 }
